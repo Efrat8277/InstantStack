@@ -2,111 +2,75 @@ package com.example.instantstack.service;
 
 import com.example.instantstack.entities.Environment;
 import com.example.instantstack.entities.Project;
-import com.example.instantstack.repositories.EnvironmentRepository;
 import com.example.instantstack.repositories.ProjectRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 public class ProjectService {
 
-
-
-    @Autowired
-    private EnvironmentRepository environmentRepository;
-
-
     @Autowired
     private ProjectRepository projectRepository;
+
     @Autowired
     private EnvironmentService environmentService;
 
+    // ניהול פרויקטים
     public List<Project> getAllProjects() {
-        List<Project> projects = projectRepository.findAll();
-        return projects;
+        return projectRepository.findAll();
     }
 
     public Project getProjectByID(Long id) {
         return projectRepository.findById(id)
-                .orElseThrow(()->new RuntimeException("project not found"));
+                .orElseThrow(() -> new RuntimeException("project not found"));
     }
 
     public void addProject(Project project) {
-        if (projectRepository.existsByName(project.getName()))
+        if (projectRepository.existsByName(project.getName())) {
             throw new RuntimeException("project already exists");
+        }
         projectRepository.save(project);
     }
 
-    public void deleteEnvironmentFromProject(Long environmentId, Long projectId) {
-        Project project = getProjectByID(projectId);
+    public void updateProject(Project project) {
+        if (!projectRepository.existsById(project.getId())) {
+            throw new RuntimeException("project not found");
+        }
+        projectRepository.save(project);
+    }
 
-        // כאן אנחנו מוצאים את האובייקט כדי שנוכל לבדוק אותו ולמחוק אותו מהרשימה
+    // ניהול סביבות בתוך פרויקט
+    @Transactional
+    public void createAndStartEnvironment(Long projectId) {
+        Project project = getProjectByID(projectId);
+        // קורא לסרביס של הסביבה שיעשה את העבודה "השחורה"
+        environmentService.createAndStartEnvironment(project);
+    }
+
+    @Transactional
+    public void deleteEnvironmentFromProject(Long environmentId, Long projectId) {
+        // 1. נביא את הסביבה
         Environment environment = environmentService.getEnvironmentByID(environmentId);
 
-        // בדיקת שייכות
+        // 2. בדיקת שייכות בלבד
         if (environment.getProject() == null || !environment.getProject().getId().equals(projectId)) {
-            throw new RuntimeException("Environment with id " + environmentId + " does not belong to project " + projectId);
+            throw new RuntimeException("Environment " + environmentId + " does not belong to project " + projectId);
         }
 
-        // 1. הסרה מהרשימה של הפרויקט
-        project.getEnvironments().remove(environment);
-        projectRepository.save(project);
-
-        // 2. קריאה למחיקה הסופית (תוודאי שבסרביס השני הפונקציה מקבלת Long)
+        // 3. פשוט קוראים למחיקה - היא כבר תטפל בניתוק הקשר ובמחיקת ה-DB
         environmentService.deleteEnvironment(environmentId);
-    }
-    public void updateProject(Project project) {
-        if(!projectRepository.existsById(project.getId()))
-            throw new RuntimeException("project not found");
-        projectRepository.save(project);
-    }
-
-    public void addEnvironmentToProject(Environment environment, Long projectId) {
-        Project project = getProjectByID(projectId);
-        project.getEnvironments().add(environment);
-        environment.setProject(project);
-        projectRepository.save(project);
-    }
-
-    public Project getProjectByName(String name) {
-        return projectRepository.findByName(name);
     }
 
     public List<Environment> getEnvironmentsByProject(Project project) {
-        if(!projectRepository.existsById(project.getId()))
-            throw new RuntimeException("project not found");
-        return project.getEnvironments();
+        Project p = getProjectByID(project.getId());
+        return p.getEnvironments();
     }
 
-
+    // פונקציית עזר שקיימת ב-Controller
     public Environment getEnvironmentByID(Long environmentId) {
         return environmentService.getEnvironmentByID(environmentId);
-   }
-
-    public void createAndStartEnvironment(Long projectId) {
-        // 1. נמצא את הפרויקט
-        Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("project not found"));
-
-        // 2. ניצור אובייקט סביבה חדש
-        Environment env = new Environment();
-        env.setPort(environmentService.findNextAvailablePort());
-        env.setStatus(Environment.Status.STARTING);
-        env.setProject(project);
-
-        // 3. קודם כל נשמור בבסיס הנתונים! (כאן נוצר ה-ID)
-        env = environmentRepository.save(env);
-
-        // 4. רק עכשיו נקרא לדוקר, כשיש לנו ID ביד
-        try {
-            environmentService.startDockerContainer(env);
-        } catch (Exception e) {
-            // אם דוקר נכשל, נעדכן את הסטטוס ב-DB לטעות
-            env.setStatus(Environment.Status.ERROR);
-            environmentRepository.save(env);
-            throw new RuntimeException("Docker failed: " + e.getMessage());
-        }
     }
 }

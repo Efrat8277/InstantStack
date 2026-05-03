@@ -1,18 +1,17 @@
 package com.example.instantstack.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(exclude = "project")
 @Builder
 @Entity
 public class Environment {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -24,8 +23,8 @@ public class Environment {
 
     @ManyToOne
     @JoinColumn(name = "project_id") // הגדרה מפורשת של עמודת הקשר
+    @JsonIgnore
     private Project project;
-
 
     public enum Status {
         PENDING,   // בהמתנה/יצירה
