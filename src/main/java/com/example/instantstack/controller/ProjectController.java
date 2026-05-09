@@ -12,7 +12,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/projects") // הכתובת הראשית של הקונטרולר
-@CrossOrigin(origins = "*")    // מאפשר לפתח דף אינטרנט שיתחבר לקוד הזה
+
 public class ProjectController {
 
     @Autowired
