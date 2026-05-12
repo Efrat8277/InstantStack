@@ -44,18 +44,20 @@ public class EnvironmentService {
          return  environmentRepository.findAll();
     }
 
+    @Transactional // הקריטי ביותר! דואג שהקשר לפרויקט יהיה פתוח בזמן המחיקה
     public void deleteEnvironment(Long id) {
-        Environment env = getEnvironmentByID(id);
-        if (env == null) {
-            throw new RuntimeException("environment not found");
-        }
-        if(env.getProject() !=null){
+        Environment env = environmentRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Environment not found with id: " + id));
+        // ניתוק הקשר מהפרויקט
+        if (env.getProject() != null) {
             env.getProject().getEnvironments().remove(env);
         }
+        // עצירה והסרה של הקונטיינר מהדוקר
         stopAndRemoveContainer(id);
-        environmentRepository.deleteById(id);
+        // מחיקה מה-DB
+        environmentRepository.delete(env);
+        System.out.println("Environment " + id + " was successfully deleted from DB and Docker.");
     }
-
     public void updateEnvironment(Long id,Environment envDetails) {
         Environment env = environmentRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Environment not found"));

@@ -27,6 +27,9 @@ public class Environment {
     private Project project;
     private Long workerId;
 
+    @Builder.Default
+    private java.time.LocalDateTime createdAt = java.time.LocalDateTime.now();//זמן יצירת הפרויקט
+
     public enum Status {
         PENDING,   // בהמתנה/יצירה
         STARTING,  // בתהליך עלייה בדוקר
