@@ -6,6 +6,7 @@ import com.example.instantstack.service.ProjectService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,6 +21,7 @@ public class ProjectController {
 
     // יצירת פרויקט חדש - חובה להריץ את זה פעם אחת בכל פעם שהשרת עולה!
     @PostMapping
+    @PreAuthorize("hasAnyRole('Admin', 'Manager')")
     public ResponseEntity<String> createProject(@RequestBody Project project) {
         projectService.addProject(project);
         return ResponseEntity.ok("Project '" + project.getName() + "' created successfully!");
@@ -34,6 +36,7 @@ public class ProjectController {
     // הצגת פרויקטים - תומך בסינון לפי מנהל או הצגת הכל (עבור Admin)
     // GET http://localhost:8080/api/projects?managerId=1
     @GetMapping
+    @PreAuthorize("hasRole('Admin')")
     public ResponseEntity<List<Project>> getProjects(@RequestParam(required = false) Long managerId) {
         if (managerId != null) {
             return ResponseEntity.ok(projectService.getProjectsByManager(managerId));
