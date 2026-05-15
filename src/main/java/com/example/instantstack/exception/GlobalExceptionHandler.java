@@ -21,7 +21,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String,String>> HandleException(Exception ex){
         Map<String,String> error = new HashMap<>();
-        error.put("massage","server error, please try again/later");
+        error.put("message","server error, please try again/later");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
 

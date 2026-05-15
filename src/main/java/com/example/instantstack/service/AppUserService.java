@@ -6,6 +6,7 @@ import com.example.instantstack.entities.Project;
 import com.example.instantstack.exception.AuthException;
 import com.example.instantstack.repositories.AppUserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.view.script.ScriptTemplateConfig;
@@ -30,7 +31,13 @@ public class AppUserService {
         appUserRepository.save(user);
     }
     public AppUser getUserByID(Long id){
-        return appUserRepository.findById(id).orElse(null);
+        AppUser currentUser = getCurrentUser();
+        if(currentUser.getRole() == AppUser.Role.Employee &&
+        !currentUser.getId().equals(id)){
+            throw new AuthException("Access Denied: You can only view your own profile.");
+        }
+        return appUserRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User with ID " + id + " was not found."));
     }
 
     public List<AppUser> getUsersByRole(AppUser.Role role){
@@ -48,14 +55,21 @@ public class AppUserService {
         return appUserRepository.findAll();
     }
 
-    public void updateUser(AppUser userDetails) {
+    public void updateUser(Long userId, AppUser userDetails) {
+        AppUser currentUser = getCurrentUser();
+
+        if (currentUser.getRole() != AppUser.Role.Admin && !currentUser.getId().equals(userId)) {
+            throw new AuthException("Access Denied: You can only update your own profile.");
+        }
 
         AppUser existingUser = appUserRepository.findById(userDetails.getId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         existingUser.setName(userDetails.getName());
         existingUser.setEmail(userDetails.getEmail());
-        existingUser.setPassword(userDetails.getPassword());
+        if (userDetails.getPassword() != null && !userDetails.getPassword().trim().isEmpty()) {
+            existingUser.setPassword(passwordEncoder.encode(userDetails.getPassword()));
+        }
 
         appUserRepository.save(existingUser);
     }
@@ -77,5 +91,27 @@ public class AppUserService {
         }
 
         return jwtService.generateToken(user.getEmail(), user.getRole());
+    }
+
+    public AppUser getCurrentUser(){
+        if(SecurityContextHolder.getContext().getAuthentication() == null){
+            throw new AuthException("No security context found. User is not authenticated.");
+        }
+
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return appUserRepository.findByEmail(email).orElseThrow(() -> new AuthException("User not found"));
+    }
+
+    public String getCurrentUserRole(){
+        if(SecurityContextHolder.getContext().getAuthentication() == null ||
+        SecurityContextHolder.getContext().getAuthentication().getAuthorities().isEmpty()){
+            return "";
+        }
+        return SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getAuthorities()
+                .iterator()
+                .next()
+                .getAuthority();
     }
 }

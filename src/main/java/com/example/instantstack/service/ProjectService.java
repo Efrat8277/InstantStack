@@ -1,7 +1,10 @@
 package com.example.instantstack.service;
 
+import com.example.instantstack.entities.AppUser;
 import com.example.instantstack.entities.Environment;
 import com.example.instantstack.entities.Project;
+import com.example.instantstack.exception.AuthException;
+import com.example.instantstack.repositories.AppUserRepository;
 import com.example.instantstack.repositories.ProjectRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -19,9 +22,20 @@ public class ProjectService {
     @Autowired
     private EnvironmentService environmentService;
 
+    @Autowired
+    private AppUserService appUserService;
+
     // ניהול פרויקטים
     public List<Project> getAllProjects() {
-        return projectRepository.findAll();
+        AppUser currentUser = appUserService.getCurrentUser();
+
+        // אם המשתמש הוא אדמין - הוא רואה את כל הפרויקטים במערכת
+        if (currentUser.getRole() == AppUser.Role.Admin) {
+            return projectRepository.findAll();
+        }
+
+        // אם הוא מנהל - הוא רואה רק את הפרויקטים שלו
+        return projectRepository.findByManagerId(currentUser.getId());
     }
 
     public Project getProjectByID(Long id) {
@@ -36,9 +50,17 @@ public class ProjectService {
         }
 
         // 2. בדיקה שהוזן מנהל (חשוב!)
-        if (project.getManagerId() == null) {
-            throw new RuntimeException("Project must have a Manager ID.");
+        AppUser appUser = appUserService.getCurrentUser();
+        String role = appUserService.getCurrentUserRole();
+        if(appUser.getRole()== AppUser.Role.Manager){
+            project.setManagerId(appUser.getId());
         }
+        else if(appUser.getRole()== AppUser.Role.Admin){
+            if (project.getManagerId() == null) {
+                throw new RuntimeException("Project must have a Manager ID.");
+            }
+        }
+
 
         // 3. בדיקת כפילות שם
         if (projectRepository.existsByName(project.getName())) {
@@ -51,7 +73,12 @@ public class ProjectService {
 
     @Transactional
     public void deleteProject(Long projectId) {
+        AppUser currentUser = appUserService.getCurrentUser();
         Project project = getProjectByID(projectId);
+
+        if(currentUser.getRole()!= AppUser.Role.Admin&&!project.getManagerId().equals(currentUser.getId())){
+            throw new AuthException("Access Denied: You are not authorized to delete this project.");
+        }
 
         /*
          * 2. ניקוי משאבים חיצוניים (Docker):
@@ -104,6 +131,11 @@ public class ProjectService {
 
     public List<Environment> getEnvironmentsByProject(Project project) {
         Project p = getProjectByID(project.getId());
+        AppUser currentUser = appUserService.getCurrentUser();
+        // אם הפרויקט לא שלו - לחסום!
+        if (currentUser.getRole() == AppUser.Role.Manager && !p.getManagerId().equals(currentUser.getId())) {
+            throw new AuthException("Access Denied: You can only view environments of your own projects.");
+        }
         return p.getEnvironments();
     }
 

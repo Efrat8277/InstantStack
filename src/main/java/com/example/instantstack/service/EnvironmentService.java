@@ -1,7 +1,9 @@
 package com.example.instantstack.service;
 
+import com.example.instantstack.entities.AppUser;
 import com.example.instantstack.entities.Environment;
 import com.example.instantstack.entities.Project;
+import com.example.instantstack.exception.AuthException;
 import com.example.instantstack.repositories.EnvironmentRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -18,9 +20,16 @@ public class EnvironmentService {
     @Autowired
     private EnvironmentRepository environmentRepository;
 
+    @Autowired
+    private AppUserService appUserService;
+
     // פונקציה ליצירת סביבה מאפס - מרכזת את כל השלבים
     @Transactional
     public Environment createAndStartEnvironment(Project project,Long workerId) {
+        AppUser currentUser = appUserService.getCurrentUser();
+        if(currentUser.getRole() == AppUser.Role.Employee){
+            workerId = currentUser.getId();
+        }
         Environment env = new Environment();
         env.setPort(findNextAvailablePort());
         env.setStatus(Environment.Status.STARTING);
@@ -48,6 +57,20 @@ public class EnvironmentService {
     public void deleteEnvironment(Long id) {
         Environment env = environmentRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Environment not found with id: " + id));
+
+        AppUser currentUser = appUserService.getCurrentUser();
+        if(currentUser.getRole() == AppUser.Role.Employee) {
+            if (!env.getWorkerId().equals(currentUser.getId())) {
+                throw new AuthException("Access Denied: You can only delete your own environments.");
+            }
+        }
+        else if(currentUser.getRole() == AppUser.Role.Manager){
+            if (env.getProject() != null &&
+                    !env.getProject().getManagerId().equals(currentUser.getId())) {
+                throw new AuthException("Access Denied: You can only delete environments from your own projects.");
+            }
+        }
+
         // ניתוק הקשר מהפרויקט
         if (env.getProject() != null) {
             env.getProject().getEnvironments().remove(env);
@@ -61,6 +84,20 @@ public class EnvironmentService {
     public void updateEnvironment(Long id,Environment envDetails) {
         Environment env = environmentRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Environment not found"));
+
+        AppUser currentUser = appUserService.getCurrentUser();
+
+        if (currentUser.getRole() == AppUser.Role.Employee) {
+            // עובד יכול לעדכן רק סביבה של עצמו
+            if (!env.getWorkerId().equals(currentUser.getId())) {
+                throw new AuthException("Access Denied: You can only update your own environments.");
+            }
+        } else if (currentUser.getRole() == AppUser.Role.Manager) {
+            // מנהל יכול לעדכן רק סביבה ששייכת לפרויקט שלו
+            if (env.getProject() != null && !env.getProject().getManagerId().equals(currentUser.getId())) {
+                throw new AuthException("Access Denied: You can only update environments in your own projects.");
+            }
+        }
 
         env.setStatus(envDetails.getStatus());
         env.setProject(envDetails.getProject());
